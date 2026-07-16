@@ -217,30 +217,32 @@ export default function AgendarPage() {
 
     setLoading(true);
 
-    // Ajuste fuso horário também no salvamento
-    const year = selectedDate.getFullYear();
-    const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
-    const day = String(selectedDate.getDate()).padStart(2, "0");
-   {/* Topo do Agendamento */}
-        <div className="mb-8 flex flex-col items-center justify-center text-center">
-          <Image
-            src="/logo.png"
-            alt="Barbearia San Thiago"
-            width={150}
-            height={150}
-            className="h-auto w-[150px] object-contain"
-            priority
-          />
-          <p className="mt-3 text-xs tracking-wider text-brand-bronze/85 uppercase">
-            Agende seu horário online
-          </p>
-        </div>
+    try {
+      const year = selectedDate.getFullYear();
+      const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+      const day = String(selectedDate.getDate()).padStart(2, "0");
+      const appointmentDate = `${year}-${month}-${day}`;
 
-    setLoading(false);
-    if (!error) {
+      const { error } = await supabase
+        .from("appointments")
+        .insert([
+          {
+            client_name: clientName,
+            client_phone: clientPhone,
+            appointment_date: appointmentDate,
+            appointment_time: selectedTime,
+            service_id: selectedService.id,
+            status: "pending",
+          },
+        ]);
+
+      if (error) throw error;
+
       setSuccess(true);
-    } else {
-      alert("Erro ao realizar agendamento: " + error.message);
+    } catch (err: any) {
+      alert("Erro ao realizar agendamento: " + err.message);
+    } finally {
+      setLoading(false);
     }
   };
 
