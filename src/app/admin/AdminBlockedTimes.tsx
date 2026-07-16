@@ -112,7 +112,7 @@ export default function AdminBlockedTimes() {
         // Se o agendamento for hoje
         if (appDateStr === todayStr) {
           dailyCount++;
-          dailyEarnings += appPrice;
+         dailyEarnings += appPrice ?? 0;
         }
 
         // Se o agendamento estiver contido na lista dos últimos 7 dias
