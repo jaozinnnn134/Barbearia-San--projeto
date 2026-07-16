@@ -1,0 +1,17 @@
+# Dependências
+node_modules/
+
+# Arquivos temporários do Next.js
+.next/
+out/
+build/
+
+# Logs e caches
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.eslintcache
+
+# Arquivos de configuração local (suas senhas e chaves)
+.env*.local
+node_modules
