@@ -28,8 +28,7 @@ async function processReminderDispatch() {
   const now = new Date();
   const todayDate = getLocalDateString(now);
 
-  const { data, error } = await db.from("appointments").select("*").eq("appointment_date", todayDate);
-
+  const { data, error } = await db.from("appointments").select("*").eq("appointment_date" as any, todayDate);
   if (error) {
     throw new Error(error.message);
   }
