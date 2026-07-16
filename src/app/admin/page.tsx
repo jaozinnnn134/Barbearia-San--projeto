@@ -2,16 +2,14 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createRepositories } from "@/lib/repositories";
 import { isAdminAuthenticated } from "@/lib/auth/admin-auth";
-import AdminBlockedTimes from "./AdminBlockedTimes"; // Ajuste o caminho se necessário
+import AdminBlockedTimes from "./AdminBlockedTimes"; 
+import AdminAppointmentsTable from "./AdminAppointmentsTable"; // Importamos o novo componente cliente
 
-function formatDateTime(value: string) {
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
+function formatCurrency(value: number) {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(value);
 }
 
 function mapAppointmentStatusLabel(status?: string | null) {
@@ -28,21 +26,10 @@ function mapAppointmentStatusLabel(status?: string | null) {
     agendado: "Pendente",
     confirmado: "Confirmado",
     cancelado: "Cancelado",
-    "não compareceu": "Não compareceu",
-    "nao compareceu": "Não compareceu",
   };
 
   return statusMap[normalized] ?? status ?? "Pendente";
 }
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-}
-
-const ADMIN_PROFESSIONAL_NAME = "Thiago";
 
 export default async function AdminDashboardPage() {
   const authenticated = await isAdminAuthenticated();
@@ -53,22 +40,46 @@ export default async function AdminDashboardPage() {
   const db = createAdminClient();
   const repos = createRepositories(db);
   const today = new Date();
+  
+  // Define o início de hoje (00:00:00) e o final de hoje (23:59:59) locais
   const start = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 0, 0, 0);
   const end = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
-  end.setDate(end.getDate() + 6);
+  
+  // Mantemos a busca para hoje e os próximos 6 dias
+  const endForFetch = new Date(end);
+  endForFetch.setDate(endForFetch.getDate() + 6);
 
   const appointments = await repos.appointments.findTodayWithRelations(
     start.toISOString(),
-    end.toISOString(),
+    endForFetch.toISOString(),
   );
 
-  const completedAppointments = appointments.filter(
-    (appointment) => appointment.status === "Finalizado",
-  );
+  // Formato YYYY-MM-DD de hoje local para filtrarmos corretamente na tela o faturamento do dia
+  const todayStr = today.getFullYear() + "-" + 
+    String(today.getMonth() + 1).padStart(2, "0") + "-" + 
+    String(today.getDate()).padStart(2, "0");
 
-  const estimatedRevenue = completedAppointments.reduce((sum, appointment) => {
-    return sum + Number(appointment.services?.price ?? 0);
-  }, 0);
+  // Filtra apenas os agendamentos que caem estritamente no dia de hoje
+  const todayAppointments = appointments.filter((app) => {
+    if (!app.appointment_date) return false;
+    return app.appointment_date === todayStr;
+  });
+
+  // 1. Agendamentos Concluídos (qualquer status que mapeie para Concluído)
+  const completedAppointments = todayAppointments.filter((app) => {
+    const label = mapAppointmentStatusLabel(app.status);
+    return label === "Concluído";
+  });
+
+  // 2. Lucro estimado do dia (soma tudo o que está Pendente ou Concluído hoje - ignora Cancelados)
+  const estimatedRevenue = todayAppointments
+    .filter((app) => {
+      const label = mapAppointmentStatusLabel(app.status);
+      return label !== "Cancelado" && label !== "Não compareceu";
+    })
+    .reduce((sum, app) => {
+      return sum + Number(app.services?.price ?? 35); // assume 35 como fallback padrão
+    }, 0);
 
   return (
     <main className="min-h-screen px-4 py-10 bg-black text-white">
@@ -99,53 +110,11 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* SEÇÃO NOVA: Bloqueio de Agenda ao lado da Tabela de Agendamentos */}
+        {/* SEÇÃO: Bloqueio de Agenda ao lado da Nova Tabela Inteligente */}
         <div className="grid gap-6 lg:grid-cols-3 mb-8">
           <div className="lg:col-span-2">
-            <section className="industrial-card overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm text-brand-smoke">
-                  <thead className="bg-brand-matte text-xs uppercase tracking-[0.25em] text-brand-bronze">
-                    <tr>
-                      <th className="px-4 py-3">Cliente</th>
-                      <th className="px-4 py-3">WhatsApp</th>
-                      <th className="px-4 py-3">Profissional</th>
-                      <th className="px-4 py-3">Horário</th>
-                      <th className="px-4 py-3">Serviços</th>
-                      <th className="px-4 py-3">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {appointments.length === 0 ? (
-                      <tr>
-                        <td colSpan={6} className="px-4 py-8 text-center text-brand-smoke">
-                          Nenhum agendamento para hoje.
-                        </td>
-                      </tr>
-                    ) : (
-                      appointments.map((appointment) => (
-                        <tr key={appointment.id} className="border-t border-brand-steel-light/30">
-                          <td className="px-4 py-3 text-brand-fog">{appointment.client_name}</td>
-                          <td className="px-4 py-3">{appointment.client_phone}</td>
-                          <td className="px-4 py-3">{ADMIN_PROFESSIONAL_NAME}</td>
-                          <td className="px-4 py-3">
-                            {formatDateTime(`${appointment.appointment_date}T${appointment.appointment_time}`)}
-                          </td>
-                          <td className="px-4 py-3">
-                            <div className="space-y-1">
-                              <span className="block">{appointment.services?.name ?? "Serviço"}</span>
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-brand-bronze">
-                            {mapAppointmentStatusLabel(appointment.status)}
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </section>
+            {/* Renderiza o componente cliente passando a lista inicial de agendamentos buscada no servidor */}
+            <AdminAppointmentsTable initialAppointments={appointments as any} />
           </div>
 
           <div>
