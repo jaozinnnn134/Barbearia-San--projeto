@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createRepositories } from "@/lib/repositories";
 import { isAdminAuthenticated } from "@/lib/auth/admin-auth";
+import AdminBlockedTimes from "./AdminBlockedTimes"; // Ajuste o caminho se necessário
 
 function formatDateTime(value: string) {
   return new Intl.DateTimeFormat("pt-BR", {
@@ -70,7 +71,7 @@ export default async function AdminDashboardPage() {
   }, 0);
 
   return (
-    <main className="min-h-screen px-4 py-10">
+    <main className="min-h-screen px-4 py-10 bg-black text-white">
       <div className="mx-auto max-w-6xl">
         <div className="mb-8 flex items-center justify-between gap-4">
           <div>
@@ -98,50 +99,60 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        <section className="industrial-card overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm text-brand-smoke">
-              <thead className="bg-brand-matte text-xs uppercase tracking-[0.25em] text-brand-bronze">
-                <tr>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">WhatsApp</th>
-                  <th className="px-4 py-3">Profissional</th>
-                  <th className="px-4 py-3">Horário</th>
-                  <th className="px-4 py-3">Serviços</th>
-                  <th className="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {appointments.length === 0 ? (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-brand-smoke">
-                      Nenhum agendamento para hoje.
-                    </td>
-                  </tr>
-                ) : (
-                  appointments.map((appointment) => (
-                    <tr key={appointment.id} className="border-t border-brand-steel-light/30">
-                      <td className="px-4 py-3 text-brand-fog">{appointment.client_name}</td>
-                      <td className="px-4 py-3">{appointment.client_phone}</td>
-                      <td className="px-4 py-3">{ADMIN_PROFESSIONAL_NAME}</td>
-                      <td className="px-4 py-3">
-                        {formatDateTime(`${appointment.appointment_date}T${appointment.appointment_time}`)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="space-y-1">
-                          <span className="block">{appointment.services?.name ?? "Serviço"}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-brand-bronze">
-                        {mapAppointmentStatusLabel(appointment.status)}
-                      </td>
+        {/* SEÇÃO NOVA: Bloqueio de Agenda ao lado da Tabela de Agendamentos */}
+        <div className="grid gap-6 lg:grid-cols-3 mb-8">
+          <div className="lg:col-span-2">
+            <section className="industrial-card overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm text-brand-smoke">
+                  <thead className="bg-brand-matte text-xs uppercase tracking-[0.25em] text-brand-bronze">
+                    <tr>
+                      <th className="px-4 py-3">Cliente</th>
+                      <th className="px-4 py-3">WhatsApp</th>
+                      <th className="px-4 py-3">Profissional</th>
+                      <th className="px-4 py-3">Horário</th>
+                      <th className="px-4 py-3">Serviços</th>
+                      <th className="px-4 py-3">Status</th>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {appointments.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-brand-smoke">
+                          Nenhum agendamento para hoje.
+                        </td>
+                      </tr>
+                    ) : (
+                      appointments.map((appointment) => (
+                        <tr key={appointment.id} className="border-t border-brand-steel-light/30">
+                          <td className="px-4 py-3 text-brand-fog">{appointment.client_name}</td>
+                          <td className="px-4 py-3">{appointment.client_phone}</td>
+                          <td className="px-4 py-3">{ADMIN_PROFESSIONAL_NAME}</td>
+                          <td className="px-4 py-3">
+                            {formatDateTime(`${appointment.appointment_date}T${appointment.appointment_time}`)}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="space-y-1">
+                              <span className="block">{appointment.services?.name ?? "Serviço"}</span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3 text-brand-bronze">
+                            {mapAppointmentStatusLabel(appointment.status)}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
-        </section>
+
+          <div>
+            {/* O formulário do bloqueio renderizado no menu lateral direito do Admin */}
+            <AdminBlockedTimes />
+          </div>
+        </div>
       </div>
     </main>
   );

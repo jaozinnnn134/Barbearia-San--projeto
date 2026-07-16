@@ -14,16 +14,17 @@ interface Service {
   description: string;
 }
 
-interface Appointment {
-  appointment_time: string;
-  service: {
-    duration_minutes: number;
-  };
+interface BlockedTime {
+  id: string;
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  is_all_day: boolean;
 }
 
 export default function AgendarPage() {
   const router = useRouter();
-  const supabase = createClient(); // Cria a conexão chamando a função correta
+  const supabase = createClient();
   
   const [services, setServices] = useState<Service[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
@@ -78,7 +79,7 @@ export default function AgendarPage() {
     }
   }, [currentWeekStart]);
 
-  // Calcula os horários de forma inteligente e dinâmica
+  // Calcula os horários de forma inteligente, dinâmica e respeitando os bloqueios
   useEffect(() => {
     if (!selectedDate || !selectedService) return;
 
@@ -94,7 +95,26 @@ export default function AgendarPage() {
         return;
       }
 
-      // Define o horário de funcionamento do dia
+      // Evita desvio de fuso horário (gera a data no formato YYYY-MM-DD local)
+      const year = safeSelectedDate.getFullYear();
+      const month = String(safeSelectedDate.getMonth() + 1).padStart(2, "0");
+      const day = String(safeSelectedDate.getDate()).padStart(2, "0");
+      const dateString = `${year}-${month}-${day}`;
+
+      // 1. BUSCA BLOQUEIOS DA AGENDA PARA ESSE DIA
+      const { data: blocks } = await supabase
+        .from("blocked_times")
+        .select("start_time, end_time, is_all_day")
+        .eq("date", dateString);
+
+      // Se houver algum bloqueio para o dia inteiro, o dia fica sem horários livres
+      const hasAllDayBlock = blocks?.some((b: BlockedTime) => b.is_all_day);
+      if (hasAllDayBlock) {
+        setAvailableTimes([]);
+        return;
+      }
+
+      // Define o horário de funcionamento padrão do dia
       let startHour = 9;
       let endHour = 19;
 
@@ -119,33 +139,54 @@ export default function AgendarPage() {
         current.setMinutes(current.getMinutes() + 30);
       }
 
-      const dateString = safeSelectedDate.toISOString().split("T")[0] ?? "";
+      // 2. BUSCA AGENDAMENTOS EXISTENTES
       const { data: appointments } = await supabase
         .from("appointments")
         .select("appointment_time, service:service_id(duration_minutes)")
         .eq("appointment_date", dateString);
-
-      if (!appointments || appointments.length === 0) {
-        setAvailableTimes(allSlots);
-        return;
-      }
 
       const filteredSlots = allSlots.filter((slot) => {
         const [slotH, slotM] = slot.split(":").map(Number);
         const slotStart = (slotH ?? 0) * 60 + (slotM ?? 0);
         const slotEnd = slotStart + safeSelectedService.duration_minutes;
 
-        for (const app of appointments as Array<{
-          appointment_time: string;
-          service?: { duration_minutes?: number };
-        }>) {
-          const [appH, appM] = app.appointment_time.slice(0, 5).split(":").map(Number);
-          const appStart = (appH ?? 0) * 60 + (appM ?? 0);
-          const appDuration = app.service?.duration_minutes ?? 30;
-          const appEnd = appStart + appDuration;
+        // A) Filtrar contra agendamentos existentes
+        if (appointments && appointments.length > 0) {
+          for (const app of appointments as Array<{
+            appointment_time: string;
+            service?: { duration_minutes?: number };
+          }>) {
+            const [appH, appM] = app.appointment_time.slice(0, 5).split(":").map(Number);
+            const appStart = (appH ?? 0) * 60 + (appM ?? 0);
+            const appDuration = app.service?.duration_minutes ?? 30;
+            const appEnd = appStart + appDuration;
 
-          if (slotStart < appEnd && slotEnd > appStart) {
-            return false;
+            if (slotStart < appEnd && slotEnd > appStart) {
+              return false;
+            }
+          }
+        }
+
+        // B) Filtrar contra bloqueios de horários parciais (ex: almoço, compromisso)
+        if (blocks && blocks.length > 0) {
+          for (const block of blocks as Array<{
+            start_time: string | null;
+            end_time: string | null;
+            is_all_day: boolean;
+          }>) {
+            if (block.is_all_day) return false;
+            if (block.start_time && block.end_time) {
+              const [bStartH, bStartM] = block.start_time.split(":").map(Number);
+              const [bEndH, bEndM] = block.end_time.split(":").map(Number);
+
+              const blockStart = (bStartH ?? 0) * 60 + (bStartM ?? 0);
+              const blockEnd = (bEndH ?? 0) * 60 + (bEndM ?? 0);
+
+              // Se o horário de início ou término do serviço colidir com o bloqueio
+              if (slotStart < blockEnd && slotEnd > blockStart) {
+                return false;
+              }
+            }
           }
         }
 
@@ -176,7 +217,11 @@ export default function AgendarPage() {
 
     setLoading(true);
 
-    const dateString = selectedDate.toISOString().split("T")[0];
+    // Ajuste fuso horário também no salvamento
+    const year = selectedDate.getFullYear();
+    const month = String(selectedDate.getMonth() + 1).padStart(2, "0");
+    const day = String(selectedDate.getDate()).padStart(2, "0");
+    const dateString = `${year}-${month}-${day}`;
 
     const { error } = await supabase.from("appointments").insert([
       {
