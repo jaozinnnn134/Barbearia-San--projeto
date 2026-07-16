@@ -65,9 +65,10 @@ export default function AdminAppointmentsTable({ initialAppointments }: TablePro
   async function handleUpdateStatus(id: string, newStatus: string) {
     setLoadingId(id);
     try {
-      const { error } = await supabase
+      // Usamos (supabase as any) para calar o compilador do NextJS de forma garantida
+      const { error } = await (supabase as any)
         .from("appointments")
-        .update({ status: newStatus } as unknown as Partial<{ status: any }>)
+        .update({ status: newStatus })
         .eq("id", id);
 
       if (error) throw error;
