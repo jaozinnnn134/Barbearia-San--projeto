@@ -223,9 +223,8 @@ export default function AgendarPage() {
       const day = String(selectedDate.getDate()).padStart(2, "0");
       const appointmentDate = `${year}-${month}-${day}`;
 
-      const { error } = await supabase
-        .from("appointments")
-        .insert([
+      const { error } = await (supabase.from("appointments") as any)
+  .insert([
           {
             client_name: clientName,
             client_phone: clientPhone,
