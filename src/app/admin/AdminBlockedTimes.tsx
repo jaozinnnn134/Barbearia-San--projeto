@@ -103,11 +103,11 @@ export default function AdminBlockedTimes() {
         const appDateStr = appDateRaw.split("T")[0];
 
         // Define o preço real baseado nas colunas existentes
-        const appPrice = app.price 
-          ? Number(app.price) 
-          : (app.service_id && servicesMap[app.service_id]) 
-            ? servicesMap[app.service_id] 
-            : 35; // valor padrão caso não tenha preço ou serviço mapeado
+        const appPrice: number = Number(
+  app.price ??
+  servicesMap[app.service_id ?? ""] ??
+  35 
+  ); // valor padrão caso não tenha preço ou serviço mapeado
 
         // Se o agendamento for hoje
         if (appDateStr === todayStr) {
