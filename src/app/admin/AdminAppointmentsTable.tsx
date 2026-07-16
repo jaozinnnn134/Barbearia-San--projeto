@@ -65,10 +65,9 @@ export default function AdminAppointmentsTable({ initialAppointments }: TablePro
   async function handleUpdateStatus(id: string, newStatus: string) {
     setLoadingId(id);
     try {
-      // @ts-ignore - Força o TypeScript a ignorar a tipagem rígida do Supabase que gera o erro de build
       const { error } = await supabase
         .from("appointments")
-        .update({ status: newStatus })
+        .update({ status: newStatus } as unknown as Partial<{ status: any }>)
         .eq("id", id);
 
       if (error) throw error;
