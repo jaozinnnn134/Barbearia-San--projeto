@@ -65,10 +65,9 @@ export default function AdminAppointmentsTable({ initialAppointments }: TablePro
   async function handleUpdateStatus(id: string, newStatus: string) {
     setLoadingId(id);
     try {
-     try {
       const { error } = await supabase
         .from("appointments")
-        .update({ status: newStatus } as any) // <- Adicionamos o "as any" bem aqui!
+        .update({ status: newStatus } as any)
         .eq("id", id);
 
       if (error) throw error;
