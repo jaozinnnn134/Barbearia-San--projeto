@@ -67,7 +67,7 @@ export default function AdminAppointmentsTable({ initialAppointments }: TablePro
     try {
       const { error } = await supabase
         .from("appointments")
-        .update({ status: newStatus } as any)
+        .update({ status: newStatus } as unknown as any) // <- Mudamos para 'as unknown as any' aqui!
         .eq("id", id);
 
       if (error) throw error;
