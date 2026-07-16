@@ -27,7 +27,7 @@ export default function AdminBlockedTimes() {
           end_time: isAllDay ? null : endTime,
           is_all_day: isAllDay,
           description: description || null,
-        },
+        } as any 
       ]);
 
       if (error) throw error;
