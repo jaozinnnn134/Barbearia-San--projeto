@@ -17,7 +17,7 @@ export default async function AdminLoginPage({
 
     const password = String(formData.get("password") ?? "");
     if (password !== ADMIN_PASSWORD) {
-      redirect("/admin/login?error=1");
+      redirect("/painel/login?error=1"); // Corrigido para /painel/login
     }
 
     const cookieStore = await cookies();
@@ -26,14 +26,14 @@ export default async function AdminLoginPage({
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 8,
+      maxAge: 60 * 60 * 24 * 30, // Aumentado para 30 dias para ele não precisar logar direto!
     });
 
-    redirect("/admin");
+    redirect("/painel"); // Corrigido para /painel
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen items-center justify-center px-4 bg-black">
       <div className="industrial-card w-full max-w-md p-8">
         <div className="mb-8 text-center">
           <p className="text-xs uppercase tracking-[0.3em] text-brand-bronze">

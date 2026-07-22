@@ -22,7 +22,7 @@ appointment_time: string;
 
 status: string;
 
-services?: {
+service?: {
 
 name: string;
 
@@ -184,7 +184,7 @@ const cleanPhone = app.client_phone.replace(/\D/g, "");
 const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
 
 
-const serviceName = app.services?.name ?? "Corte de Cabelo";
+const serviceName = app.service?.name ?? "Corte de Cabelo";
 
 const [hours, minutes] = app.appointment_time.split(":");
 
@@ -238,8 +238,7 @@ return (
 
 <tbody className="divide-y divide-brand-steel-light/10">
 
-{appointments.length === 0 ? (
-
+{(!appointments || appointments.length === 0) ? (
 <tr>
 
 <td colSpan={6} className="px-4 py-8 text-center text-brand-smoke">
@@ -312,7 +311,7 @@ title="Enviar Mensagem de Confirmação"
 
 <span className="text-brand-smoke font-medium">
 
-{appointment.services?.name ?? "Serviço"}
+{appointment.service?.name ?? "Serviço"}
 
 </span>
 

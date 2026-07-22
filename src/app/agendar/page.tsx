@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { Clock, User, Phone, CheckCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { Clock, User, Phone, CheckCircle, ChevronLeft, ChevronRight, ArrowLeft } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 
 interface Service {
@@ -26,6 +26,9 @@ export default function AgendarPage() {
   const router = useRouter();
   const supabase = createClient();
   
+  // Estado para controlar a etapa atual do agendamento (1 = Serviço, 2 = Data/Horário, 3 = Dados)
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+
   const [services, setServices] = useState<Service[]>([]);
   const [selectedService, setSelectedService] = useState<Service | null>(null);
   
@@ -79,7 +82,7 @@ export default function AgendarPage() {
     }
   }, [currentWeekStart]);
 
-  // Calcula os horários de forma inteligente, dinâmica e respeitando os bloqueios
+  // Calcula os horários disponíveis
   useEffect(() => {
     if (!selectedDate || !selectedService) return;
 
@@ -89,32 +92,27 @@ export default function AgendarPage() {
     async function calculateAvailableTimes() {
       const dayOfWeek = safeSelectedDate.getDay();
 
-      // Segunda-feira (1) é fechado
       if (dayOfWeek === 1) {
         setAvailableTimes([]);
         return;
       }
 
-      // Evita desvio de fuso horário (gera a data no formato YYYY-MM-DD local)
       const year = safeSelectedDate.getFullYear();
       const month = String(safeSelectedDate.getMonth() + 1).padStart(2, "0");
       const day = String(safeSelectedDate.getDate()).padStart(2, "0");
       const dateString = `${year}-${month}-${day}`;
 
-      // 1. BUSCA BLOQUEIOS DA AGENDA PARA ESSE DIA
       const { data: blocks } = await supabase
         .from("blocked_times")
         .select("start_time, end_time, is_all_day")
         .eq("date", dateString);
 
-      // Se houver algum bloqueio para o dia inteiro, o dia fica sem horários livres
       const hasAllDayBlock = blocks?.some((b: BlockedTime) => b.is_all_day);
       if (hasAllDayBlock) {
         setAvailableTimes([]);
         return;
       }
 
-      // Define o horário de funcionamento padrão do dia
       let startHour = 9;
       let endHour = 19;
 
@@ -139,7 +137,6 @@ export default function AgendarPage() {
         current.setMinutes(current.getMinutes() + 30);
       }
 
-      // 2. BUSCA AGENDAMENTOS EXISTENTES
       const { data: appointments } = await supabase
         .from("appointments")
         .select("appointment_time, service:service_id(duration_minutes)")
@@ -150,7 +147,6 @@ export default function AgendarPage() {
         const slotStart = (slotH ?? 0) * 60 + (slotM ?? 0);
         const slotEnd = slotStart + safeSelectedService.duration_minutes;
 
-        // A) Filtrar contra agendamentos existentes
         if (appointments && appointments.length > 0) {
           for (const app of appointments as Array<{
             appointment_time: string;
@@ -167,7 +163,6 @@ export default function AgendarPage() {
           }
         }
 
-        // B) Filtrar contra bloqueios de horários parciais (ex: almoço, compromisso)
         if (blocks && blocks.length > 0) {
           for (const block of blocks as Array<{
             start_time: string | null;
@@ -182,7 +177,6 @@ export default function AgendarPage() {
               const blockStart = (bStartH ?? 0) * 60 + (bStartM ?? 0);
               const blockEnd = (bEndH ?? 0) * 60 + (bEndM ?? 0);
 
-              // Se o horário de início ou término do serviço colidir com o bloqueio
               if (slotStart < blockEnd && slotEnd > blockStart) {
                 return false;
               }
@@ -211,6 +205,19 @@ export default function AgendarPage() {
     setCurrentWeekStart(next);
   };
 
+  const handleSelectService = (service: Service) => {
+    setSelectedService(service);
+    setSelectedTime(null);
+    setStep(2);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSelectTime = (time: string) => {
+    setSelectedTime(time);
+    setStep(3);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleBooking = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedService || !selectedDate || !selectedTime || !clientName || !clientPhone) return;
@@ -223,17 +230,16 @@ export default function AgendarPage() {
       const day = String(selectedDate.getDate()).padStart(2, "0");
       const appointmentDate = `${year}-${month}-${day}`;
 
-      const { error } = await (supabase.from("appointments") as any)
-  .insert([
-          {
-            client_name: clientName,
-            client_phone: clientPhone,
-            appointment_date: appointmentDate,
-            appointment_time: selectedTime,
-            service_id: selectedService.id,
-            status: "pending",
-          },
-        ]);
+      const { error } = await (supabase.from("appointments") as any).insert([
+        {
+          client_name: clientName,
+          client_phone: clientPhone,
+          appointment_date: appointmentDate,
+          appointment_time: selectedTime,
+          service_id: selectedService.id,
+          status: "pending",
+        },
+      ]);
 
       if (error) throw error;
 
@@ -270,8 +276,17 @@ export default function AgendarPage() {
     <main className="min-h-screen bg-brand-graphite py-12 px-4 sm:px-6">
       <div className="mx-auto max-w-2xl rounded-2xl border border-brand-bronze/10 bg-brand-steel/20 p-6 shadow-xl backdrop-blur-md">
         
-        {/* Topo do Agendamento */}
-        <div className="mb-8 flex flex-col items-center justify-center text-center">
+        {/* Topo com Botão de Voltar */}
+        <div className="mb-8 flex flex-col items-center justify-center text-center relative">
+          {step > 1 && (
+            <button
+              onClick={() => setStep((prev) => (prev - 1) as 1 | 2)}
+              className="absolute left-0 top-0 flex items-center gap-1 text-xs text-brand-smoke hover:text-brand-bronze transition-colors"
+            >
+              <ArrowLeft className="h-4 w-4" /> Voltar
+            </button>
+          )}
+
           <Image
             src="/logo.png"
             alt="Barbearia San Thiago"
@@ -285,46 +300,56 @@ export default function AgendarPage() {
           </p>
         </div>
 
-        {/* 1. SELEÇÃO DE SERVIÇOS */}
-        <div className="mb-8">
-          <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-brand-bronze">
-            1. Selecione o Serviço
-          </h2>
-          <div className="space-y-3">
-            {services.map((service) => (
-              <div
-                key={service.id}
-                onClick={() => {
-                  setSelectedService(service);
-                  setSelectedTime(null);
-                }}
-                className={`flex cursor-pointer items-center justify-between rounded-xl border p-4 transition-all ${
-                  selectedService?.id === service.id
-                    ? "border-brand-bronze bg-brand-bronze/10"
-                    : "border-brand-bronze/10 bg-brand-steel/30 hover:border-brand-bronze/30"
-                }`}
-              >
-                <div>
-                  <h3 className="font-medium text-sm text-brand-fog uppercase">{service.name}</h3>
-                  <div className="mt-1 flex items-center gap-4 text-xs text-brand-smoke">
-                    <span className="flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5 text-brand-bronze" /> {service.duration_minutes} min
+        {/* 1. SELEÇÃO DE SERVIÇOS (PASSO 1) */}
+        {step === 1 && (
+          <div className="mb-8">
+            <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-brand-bronze">
+              1. Selecione o Serviço
+            </h2>
+            <div className="space-y-3">
+              {services.map((service) => (
+                <div
+                  key={service.id}
+                  onClick={() => handleSelectService(service)}
+                  className="flex cursor-pointer items-center justify-between rounded-xl border border-brand-bronze/10 bg-brand-steel/30 p-4 transition-all hover:border-brand-bronze/40 hover:bg-brand-bronze/10"
+                >
+                  <div>
+                    <h3 className="font-medium text-sm text-brand-fog uppercase">{service.name}</h3>
+                    <div className="mt-1 flex items-center gap-4 text-xs text-brand-smoke">
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5 text-brand-bronze" /> {service.duration_minutes} min
+                      </span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-semibold text-sm text-brand-bronze">
+                      R$ {Number(service.price).toFixed(2).replace(".", ",")}
                     </span>
                   </div>
                 </div>
-                <div className="text-right">
-                  <span className="font-semibold text-sm text-brand-bronze">
-                    R$ {Number(service.price).toFixed(2).replace(".", ",")}
-                  </span>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
-        {selectedService && (
-          <>
-            {/* 2. SELEÇÃO DE DATA (Calendário Horizontal) */}
+        {/* 2. SELEÇÃO DE DATA E HORÁRIO (PASSO 2) */}
+        {step === 2 && selectedService && (
+          <div>
+            {/* Resumo do Serviço Escolhido */}
+            <div className="mb-6 rounded-xl border border-brand-bronze/20 bg-brand-bronze/10 p-3 flex justify-between items-center">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-brand-smoke">Serviço Selecionado:</p>
+                <p className="text-sm font-semibold text-brand-fog uppercase">{selectedService.name}</p>
+              </div>
+              <button 
+                onClick={() => setStep(1)} 
+                className="text-xs text-brand-bronze underline"
+              >
+                Trocar
+              </button>
+            </div>
+
+            {/* Calendário */}
             <div className="mb-8">
               <div className="mb-4 flex items-center justify-between">
                 <h2 className="text-xs font-semibold uppercase tracking-widest text-brand-bronze">
@@ -376,7 +401,7 @@ export default function AgendarPage() {
               </div>
             </div>
 
-            {/* 3. SELEÇÃO DE HORÁRIOS */}
+            {/* Horários */}
             <div className="mb-8">
               <h2 className="mb-4 text-xs font-semibold uppercase tracking-widest text-brand-bronze">
                 3. Selecione o Horário
@@ -387,11 +412,11 @@ export default function AgendarPage() {
                     <button
                       key={time}
                       type="button"
-                      onClick={() => setSelectedTime(time)}
-                      className={`rounded-full py-2.5 text-xs font-medium transition-all ${
+                      onClick={() => handleSelectTime(time)}
+                      className={`rounded-xl border p-3 text-center text-sm font-semibold transition-all ${
                         selectedTime === time
-                          ? "bg-brand-bronze text-brand-graphite font-bold shadow-lg"
-                          : "bg-brand-steel/50 text-brand-fog border border-brand-bronze/10 hover:border-brand-bronze"
+                          ? "border-brand-bronze bg-brand-bronze text-brand-graphite"
+                          : "border-brand-bronze/20 bg-brand-steel/10 text-brand-fog hover:border-brand-bronze/50"
                       }`}
                     >
                       {time}
@@ -399,61 +424,71 @@ export default function AgendarPage() {
                   ))}
                 </div>
               ) : (
-                <p className="text-center text-sm text-brand-smoke py-4">
-                  Nenhum horário disponível para o dia selecionado.
-                </p>
+                <p className="text-sm text-brand-smoke">Sem horários disponíveis para este dia.</p>
               )}
             </div>
-
-            {/* 4. DADOS DO CLIENTE */}
-            {selectedTime && (
-              <form onSubmit={handleBooking} className="border-t border-brand-bronze/10 pt-6 space-y-4">
-                <h2 className="text-xs font-semibold uppercase tracking-widest text-brand-bronze mb-2">
-                  4. Seus Dados para Contato
-                </h2>
-                <div className="space-y-3">
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-brand-smoke mb-1">Seu Nome</label>
-                    <div className="relative">
-                      <User className="absolute left-3 top-2.5 h-4 w-4 text-brand-smoke" />
-                      <input
-                        type="text"
-                        required
-                        placeholder="Ex: João Silva"
-                        value={clientName}
-                        onChange={(e) => setClientName(e.target.value)}
-                        className="w-full rounded-xl border border-brand-bronze/20 bg-brand-steel/30 py-2.5 pl-10 pr-4 text-sm text-brand-fog placeholder-brand-smoke/50 focus:border-brand-bronze focus:outline-none"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] uppercase tracking-wider text-brand-smoke mb-1">Seu Telefone / WhatsApp</label>
-                    <div className="relative">
-                      <Phone className="absolute left-3 top-2.5 h-4 w-4 text-brand-smoke" />
-                      <input
-                        type="tel"
-                        required
-                        placeholder="Ex: (11) 99999-9999"
-                        value={clientPhone}
-                        onChange={(e) => setClientPhone(e.target.value)}
-                        className="w-full rounded-xl border border-brand-bronze/20 bg-brand-steel/30 py-2.5 pl-10 pr-4 text-sm text-brand-fog placeholder-brand-smoke/50 focus:border-brand-bronze focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="w-full rounded-full bg-brand-bronze py-3.5 text-xs font-semibold uppercase tracking-widest text-brand-graphite transition-all hover:bg-brand-bronze/90"
-                >
-                  {loading ? "Reservando..." : "Confirmar Agendamento"}
-                </button>
-              </form>
-            )}
-          </>
+          </div>
         )}
+
+        {/* 3. CONFIRMAÇÃO DOS DADOS (PASSO 3) */}
+        {step === 3 && selectedService && selectedDate && selectedTime && (
+          <form onSubmit={handleBooking} className="space-y-6">
+            <div className="rounded-xl border border-brand-bronze/20 bg-brand-bronze/10 p-4 space-y-2">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-brand-bronze">Resumo da Reserva</h3>
+              <p className="text-sm text-brand-fog">
+                <strong>Serviço:</strong> {selectedService.name} (R$ {Number(selectedService.price).toFixed(2).replace(".", ",")})
+              </p>
+              <p className="text-sm text-brand-fog">
+                <strong>Data e Horário:</strong> {selectedDate.toLocaleDateString("pt-BR")} às {selectedTime}
+              </p>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-brand-smoke">
+                  Seu Nome
+                </label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-5 w-5 text-brand-smoke" />
+                  <input
+                    type="text"
+                    required
+                    value={clientName}
+                    onChange={(e) => setClientName(e.target.value)}
+                    placeholder="Digite seu nome completo"
+                    className="w-full rounded-xl border border-brand-bronze/20 bg-brand-steel/30 py-2.5 pl-10 pr-4 text-sm text-brand-fog placeholder-brand-smoke/50 focus:border-brand-bronze focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="mb-1 block text-xs font-medium uppercase tracking-wider text-brand-smoke">
+                  Seu WhatsApp
+                </label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-5 w-5 text-brand-smoke" />
+                  <input
+                    type="tel"
+                    required
+                    value={clientPhone}
+                    onChange={(e) => setClientPhone(e.target.value)}
+                    placeholder="(00) 00000-0000"
+                    className="w-full rounded-xl border border-brand-bronze/20 bg-brand-steel/30 py-2.5 pl-10 pr-4 text-sm text-brand-fog placeholder-brand-smoke/50 focus:border-brand-bronze focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full rounded-full bg-brand-bronze py-3.5 text-xs font-bold uppercase tracking-widest text-brand-graphite transition-all hover:bg-brand-bronze/90 disabled:opacity-50"
+            >
+              {loading ? "Confirmando..." : "Confirmar Agendamento"}
+            </button>
+          </form>
+        )}
+
       </div>
     </main>
   );
